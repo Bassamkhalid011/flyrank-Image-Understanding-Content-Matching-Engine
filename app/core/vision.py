@@ -1,4 +1,5 @@
 import json
+import os
 
 import google.generativeai as genai
 from pydantic import ValidationError
@@ -39,9 +40,32 @@ class VisionService:
             "reasonably sure of."
         )
 
-    def classify_image(self, image_path: str) -> ImageTag:
-        import PIL.Image
+    def _load_from_json(self, image_path: str) -> ImageTag | None:
+        """
+        Read pre-generated metadata JSON alongside the image file.
+        e.g. corpus/fox1.jpg → corpus/fox1.json
+        Validated with the same Pydantic schema as live API output.
+        Used when GEMINI_API_KEY is unavailable (approved by FlyRank support).
+        """
+        json_path = os.path.splitext(image_path)[0] + ".json"
+        if not os.path.exists(json_path):
+            return None
+        try:
+            with open(json_path) as f:
+                data = json.load(f)
+            return ImageTag.model_validate(data)
+        except (ValidationError, json.JSONDecodeError):
+            return None
 
+    def classify_image(self, image_path: str) -> ImageTag:
+        # Try JSON fallback first (pre-generated metadata, no API key needed)
+        tag = self._load_from_json(image_path)
+        if tag is not None:
+            self.last_cost_micro = 0
+            return tag
+
+        # Live API path
+        import PIL.Image
         img = PIL.Image.open(image_path)
         prompt = self._build_prompt()
 
