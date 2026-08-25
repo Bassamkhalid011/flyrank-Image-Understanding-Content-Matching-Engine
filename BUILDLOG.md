@@ -67,7 +67,7 @@ MismatchGuard checking three independent rules.
 
 ## MAJOR PROBLEM: Gemini API Key & SDK Issues (solved by developer)
 
-This was the biggest obstacle in the entire capstone. The developer (Hanzala) spent
+This was the biggest obstacle in the entire capstone. The developer (Bassam) spent
 significant time debugging this personally.
 
 ### Problem 1 — Free tier quota is 0 on new accounts
