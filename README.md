@@ -110,10 +110,9 @@ Top-1 Precision: **see eval/results.json after running `python eval/run_eval.py`
 
 - Evaluated on a small hand-labeled set (~20 pairs); thresholds are tuned on
   that data and may not generalise beyond the five animal categories.
-- Google AI Studio free-tier new accounts may have 0 quota on vision models.
-  The vision pipeline falls back to pre-generated JSON metadata files
-  (same schema, same validation) when no live API quota is available.
-  This approach was explicitly approved by FlyRank support (see BUILDLOG.md).
+- Google AI Studio now issues OAuth-style API keys (`AQ.Ab8R...`) instead of
+  the classic `AIza...` format. These only work with the new `google-genai` SDK —
+  the older `google-generativeai` package does not support them.
 - Category-mismatch detection is a keyword heuristic — it can miss synonyms
   not in its keyword list.
 - The `Vector` column stores embeddings as JSON text (SQLite-compatible for
