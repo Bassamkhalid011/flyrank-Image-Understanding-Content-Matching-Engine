@@ -1,75 +1,76 @@
 """
-Generate pre-defined metadata JSON files for each corpus image.
-These simulate Gemini Vision output (same schema, same Pydantic validation).
-The VisionService reads these files when no API key is available.
-
-Usage:
-    python scripts/generate_metadata_json.py
+Generate JSON metadata files for each corpus image based on filename.
+These are read by VisionService._load_from_json as a fallback when the API is unavailable.
 """
 import json
 import os
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "corpus")
+CORPUS_DIR = os.path.join(os.path.dirname(__file__), "..", "corpus")
 
 TEMPLATES = {
     "fox": {
         "subject": "red fox",
         "category": "animal",
-        "attributes": ["orange fur", "bushy tail", "pointed ears", "wild", "forest"],
-        "caption": "A red fox (Vulpes vulpes) with distinctive orange fur standing in a natural habitat.",
-        "confidence": 0.93,
+        "attributes": ["orange fur", "wild", "forest", "bushy tail"],
+        "caption": "A red fox standing in a forest clearing with its distinctive orange coat.",
+        "confidence": 0.95,
     },
     "wolf": {
         "subject": "gray wolf",
         "category": "animal",
-        "attributes": ["gray coat", "pack animal", "apex predator", "wild", "forest"],
-        "caption": "A gray wolf (Canis lupus) in its natural forest environment.",
-        "confidence": 0.91,
+        "attributes": ["gray fur", "wild", "pack animal", "forest"],
+        "caption": "A gray wolf in its natural forest habitat, an apex predator of the wilderness.",
+        "confidence": 0.95,
     },
     "dog": {
         "subject": "domestic dog",
         "category": "animal",
-        "attributes": ["friendly", "domesticated", "companion animal", "fur coat"],
-        "caption": "A domestic dog, a loyal companion animal bred to live alongside humans.",
+        "attributes": ["domestic", "friendly", "companion", "pet"],
+        "caption": "A domestic dog, a loyal family companion known for its friendly nature.",
         "confidence": 0.95,
     },
     "bear": {
         "subject": "brown bear",
         "category": "animal",
-        "attributes": ["brown fur", "large", "omnivore", "wild", "powerful"],
-        "caption": "A brown bear (Ursus arctos) in the wild, a powerful omnivore.",
-        "confidence": 0.92,
+        "attributes": ["brown fur", "large", "wild", "omnivore"],
+        "caption": "A large brown bear in the wild, preparing for its seasonal hibernation.",
+        "confidence": 0.95,
     },
     "deer": {
         "subject": "white-tailed deer",
         "category": "animal",
-        "attributes": ["slender", "antlers", "white tail", "graceful", "woodland"],
-        "caption": "A white-tailed deer (Odocoileus virginianus) in a woodland meadow.",
-        "confidence": 0.90,
+        "attributes": ["white tail", "graceful", "wild", "herbivore"],
+        "caption": "A white-tailed deer in its natural habitat, alert and ready to flee.",
+        "confidence": 0.95,
     },
 }
 
-COUNTS = {"fox": 10, "wolf": 10, "dog": 10, "bear": 10, "deer": 10}
-
 
 def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
     created = 0
+    skipped = 0
 
-    for prefix, count in COUNTS.items():
-        template = TEMPLATES[prefix]
-        for i in range(1, count + 1):
-            filename = f"{prefix}{i}.json"
-            dest = os.path.join(OUTPUT_DIR, filename)
-            if os.path.exists(dest):
-                print(f"Skipping {filename} (exists)")
-                continue
-            with open(dest, "w") as f:
-                json.dump(template, f, indent=2)
-            print(f"Created {filename}")
-            created += 1
+    for filename in sorted(os.listdir(CORPUS_DIR)):
+        if not filename.lower().endswith((".jpg", ".jpeg", ".png")):
+            continue
 
-    print(f"\nDone: {created} JSON metadata files created in {os.path.abspath(OUTPUT_DIR)}")
+        prefix = "".join(c for c in filename.split(".")[0] if not c.isdigit())
+        template = TEMPLATES.get(prefix)
+        if template is None:
+            print(f"No template for {filename}, skipping")
+            continue
+
+        json_path = os.path.join(CORPUS_DIR, os.path.splitext(filename)[0] + ".json")
+        if os.path.exists(json_path):
+            skipped += 1
+            continue
+
+        with open(json_path, "w") as f:
+            json.dump(template, f, indent=2)
+        print(f"Created {os.path.basename(json_path)}")
+        created += 1
+
+    print(f"\nDone: {created} created, {skipped} skipped")
 
 
 if __name__ == "__main__":

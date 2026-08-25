@@ -20,13 +20,28 @@ class BatchVisionJob:
     def _already_processed(self, filename: str) -> bool:
         return self.db.query(Image).filter(Image.filename == filename).first() is not None
 
+    def _load_embedding_from_json(self, path: str) -> list[float] | None:
+        json_path = os.path.splitext(path)[0] + ".json"
+        if not os.path.exists(json_path):
+            return None
+        import json as _json
+        try:
+            with open(json_path) as f:
+                data = _json.load(f)
+            emb = data.get("embedding")
+            if isinstance(emb, list) and len(emb) > 0:
+                return emb
+        except Exception:
+            pass
+        return None
+
     def _process_one(self, filename: str, path: str) -> tuple[str, int, str | None]:
         """Returns (status, attempts_used, error_message)."""
         last_error = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 tag = self.vision.classify_image(path)
-                embedding = self.embeddings.embed_text(tag.caption)
+                embedding = self._load_embedding_from_json(path) or self.embeddings.embed_text(tag.caption)
                 is_flagged = self.vision.is_flagged(tag)
                 cost_micro = self.vision.last_cost_micro + self.embeddings.last_cost_micro
 

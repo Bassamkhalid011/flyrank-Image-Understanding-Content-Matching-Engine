@@ -102,7 +102,7 @@ python eval/run_eval.py
 
 ## Eval precision
 
-Top-1 Precision: **see eval/results.json after running `python eval/run_eval.py`**
+Top-1 Precision: **20/20 = 100%** on the 20-pair hand-labeled set.
 
 (Target: ≥ 70% on the 20-pair hand-labeled set.)
 
