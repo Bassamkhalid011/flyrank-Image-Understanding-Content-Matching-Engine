@@ -33,6 +33,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Image Understanding & Content Matching Engine", lifespan=lifespan)
 
+from app.api.routes import router  # noqa: E402
+
+app.include_router(router)
+
 
 @app.get("/health")
 def health() -> dict:
