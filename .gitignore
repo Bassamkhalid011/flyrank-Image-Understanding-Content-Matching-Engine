@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+images/
+corpus/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+*.db
+*.sqlite3
+.DS_Store
+.idea/
+.vscode/
+eval/results.json
