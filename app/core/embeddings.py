@@ -1,23 +1,25 @@
-import google.generativeai as genai
 import numpy as np
+from google import genai
 
 from app.config import settings
 
 
+def _client() -> genai.Client:
+    return genai.Client(api_key=settings.GEMINI_API_KEY)
+
+
 class EmbeddingService:
     def __init__(self) -> None:
-        if settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
         self.last_cost_micro = 0
 
     def embed_text(self, text: str) -> list[float]:
-        result = genai.embed_content(
+        client = _client()
+        result = client.models.embed_content(
             model=settings.EMBEDDING_MODEL,
-            content=text,
-            task_type="SEMANTIC_SIMILARITY",
+            contents=text,
         )
-        self.last_cost_micro = 0  # Gemini embeddings free tier = $0
-        return result["embedding"]
+        self.last_cost_micro = 0  # free tier
+        return list(result.embeddings[0].values)
 
 
 def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:

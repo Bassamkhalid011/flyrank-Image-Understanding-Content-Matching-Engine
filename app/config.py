@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.75
     CONFIDENCE_THRESHOLD: float = 0.80
 
-    VISION_MODEL: str = "gemini-1.5-flash"
-    EMBEDDING_MODEL: str = "models/text-embedding-004"
+    VISION_MODEL: str = "gemini-2.5-flash"
+    EMBEDDING_MODEL: str = "gemini-embedding-001"
 
 
 settings = Settings()

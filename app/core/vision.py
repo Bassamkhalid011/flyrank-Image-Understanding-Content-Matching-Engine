@@ -1,7 +1,9 @@
+import io
 import json
 import os
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from pydantic import ValidationError
 
 from app.config import settings
@@ -14,11 +16,12 @@ class VisionError(Exception):
     """Raised when the vision model fails to produce schema-valid output after retries."""
 
 
+def _client() -> genai.Client:
+    return genai.Client(api_key=settings.GEMINI_API_KEY)
+
+
 class VisionService:
     def __init__(self) -> None:
-        if settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-        self._model = genai.GenerativeModel(settings.VISION_MODEL)
         self.last_cost_micro = 0
 
     def _build_prompt(self) -> str:
@@ -26,26 +29,19 @@ class VisionService:
             "You are an image understanding system. Look at the image and "
             "respond with ONLY a JSON object matching exactly this schema, "
             "no markdown, no extra text:\n"
-            "{\n"
-            '  "subject": string,        // the main subject, e.g. "red fox"\n'
-            '  "category": string,       // one of: animal, landscape, food, '
-            "person, vehicle, building, plant, object, unknown\n"
-            '  "attributes": [string],   // notable visual attributes, e.g. '
-            '["orange fur", "wild", "forest"]\n'
-            '  "caption": string,        // a one-sentence natural language caption\n'
-            '  "confidence": float       // your confidence in this classification, 0.0-1.0\n'
-            "}\n"
-            "If you are unsure of the subject, use category \"unknown\" and a "
-            "low confidence score. Never invent a subject you are not "
-            "reasonably sure of."
+            '{"subject": "main subject e.g. red fox", '
+            '"category": "one of: animal landscape food person vehicle building plant object unknown", '
+            '"attributes": ["visual", "traits"], '
+            '"caption": "one sentence description", '
+            '"confidence": 0.95}'
+            "\nIf unsure, use category 'unknown' and low confidence."
         )
 
     def _load_from_json(self, image_path: str) -> ImageTag | None:
         """
-        Read pre-generated metadata JSON alongside the image file.
-        e.g. corpus/fox1.jpg → corpus/fox1.json
-        Validated with the same Pydantic schema as live API output.
-        Used when GEMINI_API_KEY is unavailable (approved by FlyRank support).
+        Read pre-generated metadata JSON alongside the image.
+        e.g. corpus/fox1.jpg -> corpus/fox1.json
+        Same Pydantic validation as live API. Approved by FlyRank support.
         """
         json_path = os.path.splitext(image_path)[0] + ".json"
         if not os.path.exists(json_path):
@@ -57,37 +53,49 @@ class VisionService:
         except (ValidationError, json.JSONDecodeError):
             return None
 
+    def _call_api(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+        """Call Gemini vision API and return raw response text."""
+        client = _client()
+        response = client.models.generate_content(
+            model=settings.VISION_MODEL,
+            contents=[
+                types.Part.from_text(text=self._build_prompt()),
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            ),
+        )
+        return response.text
+
     def classify_image(self, image_path: str) -> ImageTag:
-        # Try JSON fallback first (pre-generated metadata, no API key needed)
+        # JSON fallback first (pre-generated metadata, no API quota needed)
         tag = self._load_from_json(image_path)
         if tag is not None:
             self.last_cost_micro = 0
             return tag
 
         # Live API path
-        import PIL.Image
-        img = PIL.Image.open(image_path)
-        prompt = self._build_prompt()
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        ext = os.path.splitext(image_path)[1].lower()
+        mime_type = "image/png" if ext == ".png" else "image/jpeg"
 
         last_error: Exception | None = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                response = self._model.generate_content(
-                    [prompt, img],
-                    generation_config={"response_mime_type": "application/json"},
-                )
-                self.last_cost_micro = 0  # Gemini Flash free tier = $0
-                return ImageTag.model_validate_json(response.text)
+                text = self._call_api(image_bytes, mime_type)
+                self.last_cost_micro = 0
+                return ImageTag.model_validate_json(text)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
                 continue
-            except Exception as exc:  # transport/API errors also retried
+            except Exception as exc:
                 last_error = exc
                 continue
 
         raise VisionError(
-            f"Vision model failed to produce schema-valid output after "
-            f"{MAX_RETRIES} attempts: {last_error}"
+            f"Vision model failed after {MAX_RETRIES} attempts: {last_error}"
         )
 
     def is_flagged(self, tag: ImageTag) -> bool:
