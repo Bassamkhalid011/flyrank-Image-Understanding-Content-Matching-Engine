@@ -1,7 +1,7 @@
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    ARRAY,
     JSON,
     Boolean,
     DateTime,
@@ -11,8 +11,26 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    types,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Vector(types.TypeDecorator):
+    """Stores a list[float] as JSON text — compatible with both SQLite and Postgres."""
+
+    impl = types.Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return json.loads(value)
 
 
 class Base(DeclarativeBase):
@@ -36,7 +54,7 @@ class Image(Base):
     caption: Mapped[str] = mapped_column(Text)
     confidence: Mapped[float] = mapped_column(Float)
 
-    embedding: Mapped[list] = mapped_column(ARRAY(Float), nullable=True)
+    embedding: Mapped[list | None] = mapped_column(Vector, nullable=True)
 
     is_flagged: Mapped[bool] = mapped_column(Boolean, default=False)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -52,7 +70,7 @@ class Post(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list] = mapped_column(ARRAY(Float), nullable=True)
+    embedding: Mapped[list | None] = mapped_column(Vector, nullable=True)
 
 
 class ImageSuggestion(Base):

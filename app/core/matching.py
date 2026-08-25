@@ -17,7 +17,7 @@ class MatchingEngine:
         if post is None or post.embedding is None:
             return []
 
-        images = self.db.query(Image).filter(Image.embedding.isnot(None)).all()
+        images = [img for img in self.db.query(Image).all() if img.embedding is not None]
         scored = [
             {"image": image, "score": cosine_similarity(post.embedding, image.embedding)}
             for image in images
