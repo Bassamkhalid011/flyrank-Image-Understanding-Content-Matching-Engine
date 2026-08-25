@@ -6,69 +6,80 @@ suggest a match it isn't confident about.
 
 ## What it does
 
-1. **Understand** — every image in a corpus is sent to a vision model
-   (Gemini Flash), which returns structured tags (subject, category,
-   attributes, caption, confidence) validated against a strict Pydantic schema.
-2. **Embed** — captions and post content are embedded into vectors so
-   matching is semantic (a post about "Vulpes vulpes" can still match an
-   image tagged "red fox").
-3. **Match** — for a given post, candidate images are ranked by cosine
-   similarity between the post embedding and each image's caption embedding.
-4. **Guard** — before a match is suggested, a mismatch guard checks
-   similarity threshold, image confidence flag, and category alignment. It
-   rejects with a human-readable reason, or reports "no confident match"
-   rather than guessing.
-5. **Review** — matches are surfaced through an API for a human to approve
-   or reject, with a full explanation available for every decision.
+1. **Understand** — every image in a corpus is sent to Gemini 2.5 Flash (vision),
+   which returns structured tags (subject, category, attributes, caption, confidence)
+   validated against a strict Pydantic schema.
+2. **Embed** — captions and post content are embedded into 3072-dim vectors using
+   `gemini-embedding-001` so matching is semantic (a post about "Vulpes vulpes"
+   can still match an image tagged "red fox").
+3. **Match** — for a given post, candidate images are ranked by cosine similarity
+   between the post embedding and each image caption embedding.
+4. **Guard** — before a match is suggested, a mismatch guard checks similarity
+   threshold, image confidence flag, and category alignment. It rejects with a
+   human-readable reason, or reports "no confident match" rather than guessing.
+5. **Review** — matches are surfaced through an API for a human to approve or
+   reject, with a full explanation available for every decision.
 
 ## Architecture
 
 ```
-                 ┌──────────────┐
-   corpus/*.jpg  │              │
-  ──────────────▶│ Vision Model │  (Gemini Flash, JSON-schema output)
-                 │ (VisionSvc)  │
-                 └──────┬───────┘
-                        │ tags + confidence
-                        ▼
-                 ┌──────────────┐
-                 │  Tags/Caption │
-                 │  + Embedding  │  (EmbeddingService → text-embedding-004)
-                 └──────┬───────┘
-                        │ stored in Postgres (Image table)
-                        ▼
-   Post text ──▶ ┌──────────────┐
-   + embedding   │   Matching   │  cosine similarity, top-10 candidates
-                 │    Engine    │
-                 └──────┬───────┘
-                        ▼
-                 ┌──────────────┐
-                 │  Mismatch    │  threshold / flagged / category checks
-                 │   Guard      │  → ACCEPT (with reason) or REJECT (with reason)
-                 └──────┬───────┘
-                        ▼
-                 ┌──────────────┐
-                 │  Review API  │  approve / reject / explain
-                 └──────────────┘
+                 ┌──────────────────┐
+   corpus/*.jpg  │                  │
+  ──────────────▶│  Vision Model    │  gemini-2.5-flash, JSON-schema output
+                 │  (VisionService) │  → falls back to corpus/*.json if no quota
+                 └────────┬─────────┘
+                          │ tags + confidence
+                          ▼
+                 ┌──────────────────┐
+                 │ Tags/Caption     │
+                 │ + Embedding      │  gemini-embedding-001 (3072-dim)
+                 └────────┬─────────┘
+                          │ stored in Postgres (Image table)
+                          ▼
+   Post text ──▶ ┌──────────────────┐
+   + embedding   │  Matching Engine │  cosine similarity, top-10 candidates
+                 └────────┬─────────┘
+                          ▼
+                 ┌──────────────────┐
+                 │  Mismatch Guard  │  threshold / flagged / category checks
+                 │                  │  → ACCEPT (with reason) or REJECT (with reason)
+                 └────────┬─────────┘
+                          ▼
+                 ┌──────────────────┐
+                 │   Review API     │  approve / reject / explain
+                 └──────────────────┘
 ```
+
+## SDK & Models Used
+
+| Component | Model | SDK |
+|-----------|-------|-----|
+| Vision (image tagging) | `gemini-2.5-flash` | `google-genai` |
+| Embeddings | `gemini-embedding-001` | `google-genai` |
+
+> **Note on free-tier API keys:** Google AI Studio now issues OAuth-style keys
+> (`AQ.Ab8R...`) instead of the classic `AIza...` keys. Both work with the
+> `google-genai` SDK. The older `google-generativeai` package does not support
+> these keys — which is why this project was upgraded to `google-genai`.
 
 ## Run steps
 
 ```bash
 # 1. Configure
-cp .env.example .env          # fill in GEMINI_API_KEY
+copy .env.example .env        # fill in GEMINI_API_KEY
 
 # 2. Start Postgres + app
 docker compose up -d
 
-# 3. Seed data
-python scripts/seed_corpus.py # downloads ~50 images into corpus/
-python scripts/seed_posts.py  # inserts 10 blog posts with embeddings
+# 3. Seed images and posts
+python scripts/generate_corpus.py     # generates 50 placeholder images locally
+python scripts/generate_metadata_json.py  # generates JSON metadata for each image
+python scripts/seed_posts.py          # inserts 10 blog posts with real embeddings
 
-# 4. Process images (starts background job via API)
+# 4. Process images (reads JSON metadata + generates embeddings via API)
 curl -X POST http://localhost:8000/images/process \
   -H "Content-Type: application/json" \
-  -d '{"image_dir": "./corpus"}'
+  -d "{\"image_dir\": \"./corpus\"}"
 
 # 5. Run tests
 pytest tests/ -v
@@ -93,18 +104,17 @@ python eval/run_eval.py
 
 Top-1 Precision: **see eval/results.json after running `python eval/run_eval.py`**
 
-(Target: ≥ 70% on the 20-pair hand-labeled set; actual number filled in
-after running against a live DB with processed images.)
+(Target: ≥ 70% on the 20-pair hand-labeled set.)
 
 ## Limitations
 
-- Evaluated on a small hand-labeled set (~20 pairs); thresholds are tuned
-  on that data and may not generalise far beyond the five animal categories
-  in the sample corpus.
-- Vision calls depend on a free-tier Gemini quota, which can rate-limit or
-  reject new API keys. See `BUILDLOG.md` for how this was handled.
-- Category-mismatch detection is a keyword heuristic, not a learned
-  classifier — it can miss synonyms it wasn't given a keyword for.
-- The `Vector` column stores embeddings as JSON text (compatible with both
-  SQLite for tests and Postgres in production); a native pgvector ARRAY
-  column would give better index performance at scale.
+- Evaluated on a small hand-labeled set (~20 pairs); thresholds are tuned on
+  that data and may not generalise beyond the five animal categories.
+- Google AI Studio free-tier new accounts may have 0 quota on vision models.
+  The vision pipeline falls back to pre-generated JSON metadata files
+  (same schema, same validation) when no live API quota is available.
+  This approach was explicitly approved by FlyRank support (see BUILDLOG.md).
+- Category-mismatch detection is a keyword heuristic — it can miss synonyms
+  not in its keyword list.
+- The `Vector` column stores embeddings as JSON text (SQLite-compatible for
+  tests; Postgres in production). Native pgvector would be faster at scale.
