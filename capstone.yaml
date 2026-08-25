@@ -1,0 +1,12 @@
+run: "docker compose up"
+seed: "python scripts/seed_corpus.py && python scripts/seed_posts.py"
+test: "pytest tests/ -v"
+eval: "python eval/run_eval.py"
+base_url: "http://localhost:8000"
+endpoints:
+  - POST /images/process
+  - GET /posts/{post_id}/images
+  - POST /suggestions/{suggestion_id}/approve
+  - POST /suggestions/{suggestion_id}/reject
+  - GET /suggestions/{suggestion_id}/explain
+  - GET /jobs/costs
