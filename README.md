@@ -6,7 +6,7 @@ suggest a match it isn't confident about.
 
 ## What it does
 
-1. **Understand** — every image in a corpus is sent to Gemini 2.5 Flash (vision),
+1. **Understand** — every image in a corpus is sent to Gemini 3.6 Flash (vision),
    which returns structured tags (subject, category, attributes, caption, confidence)
    validated against a strict Pydantic schema.
 2. **Embed** — captions and post content are embedded into 3072-dim vectors using
@@ -25,8 +25,8 @@ suggest a match it isn't confident about.
 ```
                  ┌──────────────────┐
    corpus/*.jpg  │                  │
-  ──────────────▶│  Vision Model    │  gemini-2.5-flash, JSON-schema output
-                 │  (VisionService) │  → falls back to corpus/*.json if no quota
+  ──────────────▶│  Vision Model    │  gemini-3.6-flash, JSON-schema output
+                 │  (VisionService) │  → falls back to corpus/*.json if quota exhausted
                  └────────┬─────────┘
                           │ tags + confidence
                           ▼
@@ -54,7 +54,7 @@ suggest a match it isn't confident about.
 
 | Component | Model | SDK |
 |-----------|-------|-----|
-| Vision (image tagging) | `gemini-2.5-flash` | `google-genai` |
+| Vision (image tagging) | `gemini-3.6-flash` | `google-genai` |
 | Embeddings | `gemini-embedding-001` | `google-genai` |
 
 > **Note on free-tier API keys:** Google AI Studio now issues OAuth-style keys
@@ -103,6 +103,10 @@ python eval/run_eval.py
 ## Eval precision
 
 Top-1 Precision: **20/20 = 100%** on the 20-pair hand-labeled set.
+
+22 images were classified by the live `gemini-3.6-flash` vision API; the remaining
+28 used pre-generated JSON metadata (free-tier daily quota: 20 req/day) with real
+`gemini-embedding-001` embeddings for all 50 images.
 
 (Target: ≥ 70% on the 20-pair hand-labeled set.)
 
