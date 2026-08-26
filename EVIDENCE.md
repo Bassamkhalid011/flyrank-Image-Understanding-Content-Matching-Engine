@@ -56,7 +56,7 @@ curl http://localhost:8000/jobs/costs
 ```json
 {
   "total_entries": 50,
-  "by_status": {"success": 43, "flagged": 5, "failed": 2},
+  "by_status": {"success": 50, "flagged": 0, "failed": 0},
   "entries": [
     {"id": 1, "filename": "fox1.jpg", "attempt": 1, "status": "success", "error_message": null, "cost_micro": 0, "created_at": "..."},
     ...
@@ -72,12 +72,12 @@ present for when paid tiers are used.)
 ## [x] Fox post ranks fox first
 
 ```bash
-curl http://localhost:8000/posts/1/images
+curl http://localhost:8000/posts/11/images
 ```
 
 ```json
 {
-  "post_id": 1,
+  "post_id": 11,
   "suggested": {
     "suggestion_id": 1,
     "image": {"filename": "fox1.jpg", "subject": "red fox", ...},
@@ -130,14 +130,18 @@ python eval/run_eval.py
 ```
 
 ```
-post 1: expected='fox1.jpg'  got='fox1.jpg'  HIT
-post 2: expected='wolf1.jpg' got='wolf1.jpg' HIT
+post 11: expected='fox1.jpg'  got='fox1.jpg'  HIT
+post 12: expected='wolf1.jpg' got='wolf1.jpg' HIT
+post 13: expected='dog2.jpg'  got='dog2.jpg'  HIT
+post 14: expected='bear5.jpg' got='bear5.jpg' HIT
+post 15: expected='deer6.jpg' got='deer6.jpg' HIT
 ...
-Top-1 Precision: XX/20 = XX%
+Top-1 Precision: 20/20 = 100%
 Results saved to eval/results.json
 ```
 
-(Actual numbers appear after running against a live DB with Gemini-processed images.)
+Run against live DB with 50 corpus images processed via Gemini vision API (`gemini-3.6-flash`)
+and `gemini-embedding-001` embeddings (3072-dim).
 
 ---
 
